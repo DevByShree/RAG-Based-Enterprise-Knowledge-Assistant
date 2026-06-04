@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RAG PDF Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Söhne:wght@300;400;500;600&family=Söhne+Mono&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary: #212121;
+    --bg-secondary: #2f2f2f;
+    --bg-sidebar: #171717;
+    --bg-input: #2f2f2f;
+    --bg-hover: #3a3a3a;
+    --bg-active: #424242;
+    --text-primary: #ececec;
+    --text-secondary: #8e8ea0;
+    --text-muted: #565656;
+    --accent: #10a37f;
+    --accent-hover: #0e8c6c;
+    --border: #3a3a3a;
+    --user-bubble: #2f2f2f;
+    --bot-bubble: transparent;
+    --scrollbar: #424242;
+  }
+
+  html, body { height: 100%; font-family: 'Söhne', ui-sans-serif, system-ui, sans-serif; background: var(--bg-primary); color: var(--text-primary); overflow: hidden; }
+
+  .app { display: flex; height: 100vh; }
+
+  /* Sidebar */
+  .sidebar { width: 260px; background: var(--bg-sidebar); display: flex; flex-direction: column; padding: 8px; flex-shrink: 0; border-right: 1px solid var(--border); }
+  .sidebar-top { padding: 4px; margin-bottom: 4px; }
+  .new-chat-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 8px; border: none; background: transparent; color: var(--text-primary); font-size: 14px; cursor: pointer; transition: background 0.15s; text-align: left; font-family: inherit; }
+  .new-chat-btn:hover { background: var(--bg-hover); }
+  .new-chat-btn svg { flex-shrink: 0; }
+
+  .sidebar-section-label { font-size: 11px; color: var(--text-muted); padding: 8px 12px 4px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+
+  .chat-history-item { display: flex; align-items: center; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-secondary); transition: background 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; gap: 8px; }
+  .chat-history-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .chat-history-item.active { background: var(--bg-active); color: var(--text-primary); }
+  .chat-history-item svg { flex-shrink: 0; opacity: 0.5; }
+
+  .sidebar-bottom { margin-top: auto; border-top: 1px solid var(--border); padding-top: 8px; }
+  .model-badge { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-secondary); transition: background 0.15s; }
+  .model-badge:hover { background: var(--bg-hover); }
+  .model-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; box-shadow: 0 0 6px var(--accent); }
+
+  /* Main */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+  .chat-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--bg-primary); flex-shrink: 0; }
+  .model-selector { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 500; color: var(--text-primary); cursor: pointer; padding: 6px 10px; border-radius: 8px; transition: background 0.15s; }
+  .model-selector:hover { background: var(--bg-hover); }
+  .model-selector svg { color: var(--text-secondary); }
+  .header-actions { display: flex; gap: 4px; }
+  .icon-btn { width: 36px; height: 36px; border-radius: 8px; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  /* Messages */
+  .messages-container { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+  .messages-container::-webkit-scrollbar { width: 6px; }
+  .messages-container::-webkit-scrollbar-track { background: transparent; }
+  .messages-container::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+
+  .messages-inner { max-width: 760px; margin: 0 auto; padding: 24px 24px 8px; }
+
+  /* Welcome */
+  .welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; text-align: center; padding: 40px 24px; }
+  .welcome-logo { width: 52px; height: 52px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
+  .welcome-logo svg { color: white; }
+  .welcome h1 { font-size: 28px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
+  .welcome p { font-size: 15px; color: var(--text-secondary); max-width: 400px; line-height: 1.6; }
+
+  .suggestion-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 28px; width: 100%; max-width: 520px; }
+  .suggestion-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; cursor: pointer; text-align: left; transition: all 0.15s; font-family: inherit; color: var(--text-primary); }
+  .suggestion-card:hover { background: var(--bg-hover); border-color: #555; transform: translateY(-1px); }
+  .suggestion-card .s-title { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+  .suggestion-card .s-sub { font-size: 12px; color: var(--text-secondary); }
+
+  /* Message rows */
+  .message-row { padding: 16px 0; animation: fadeUp 0.25s ease; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .message-row.user { display: flex; justify-content: flex-end; }
+  .message-row.bot { display: flex; gap: 14px; align-items: flex-start; }
+
+  .bot-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .bot-avatar svg { color: white; width: 16px; height: 16px; }
+
+  .user-bubble { background: var(--user-bubble); border: 1px solid var(--border); border-radius: 18px; padding: 12px 18px; max-width: 72%; font-size: 15px; line-height: 1.65; color: var(--text-primary); word-break: break-word; }
+
+  .bot-content { flex: 1; font-size: 15px; line-height: 1.75; color: var(--text-primary); padding-top: 4px; }
+  .bot-content p { margin-bottom: 10px; }
+  .bot-content p:last-child { margin-bottom: 0; }
+  .bot-content ul, .bot-content ol { padding-left: 22px; margin: 8px 0 10px; }
+  .bot-content li { margin-bottom: 5px; }
+  .bot-content strong { color: #fff; font-weight: 500; }
+  .bot-content code { background: #1a1a1a; border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; font-size: 13px; font-family: 'Söhne Mono', 'Courier New', monospace; color: #e8c77a; }
+  .bot-content pre { background: #1a1a1a; border: 1px solid var(--border); border-radius: 10px; padding: 16px; overflow-x: auto; margin: 12px 0; }
+  .bot-content pre code { background: none; border: none; padding: 0; font-size: 13px; color: #abb2bf; }
+
+  .source-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .source-pill { display: flex; align-items: center; gap: 5px; background: rgba(16,163,127,0.1); border: 1px solid rgba(16,163,127,0.25); color: var(--accent); border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 500; }
+  .source-pill svg { width: 10px; height: 10px; }
+
+  .bot-actions { display: flex; gap: 4px; margin-top: 10px; opacity: 0; transition: opacity 0.15s; }
+  .message-row.bot:hover .bot-actions { opacity: 1; }
+  .action-btn { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 6px; border: none; background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+  .action-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+
+  /* Typing */
+  .typing-row { display: flex; gap: 14px; align-items: flex-start; padding: 16px 0; }
+  .typing-dots { display: flex; gap: 4px; padding-top: 8px; }
+  .typing-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); animation: pulse 1.4s infinite; }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse { 0%,60%,100% { opacity: 0.3; transform: scale(1); } 30% { opacity: 1; transform: scale(1.2); } }
+
+  /* Input */
+  .input-area { padding: 12px 24px 20px; background: var(--bg-primary); flex-shrink: 0; }
+  .input-box { max-width: 760px; margin: 0 auto; }
+  .input-wrapper { background: var(--bg-input); border: 1px solid var(--border); border-radius: 16px; display: flex; flex-direction: column; padding: 12px 14px 10px; transition: border-color 0.2s; }
+  .input-wrapper:focus-within { border-color: #555; }
+  .input-wrapper textarea { background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 15px; line-height: 1.6; resize: none; width: 100%; font-family: inherit; max-height: 180px; overflow-y: auto; }
+  .input-wrapper textarea::placeholder { color: var(--text-muted); }
+  .input-wrapper textarea::-webkit-scrollbar { width: 4px; }
+  .input-wrapper textarea::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
+
+  .input-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+  .input-tools { display: flex; gap: 4px; }
+  .tool-btn { display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.15s; font-family: inherit; }
+  .tool-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: #555; }
+  .tool-btn svg { width: 13px; height: 13px; }
+
+  .send-btn { width: 34px; height: 34px; border-radius: 8px; border: none; background: var(--accent); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
+  .send-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+  .send-btn:disabled { background: var(--bg-active); color: var(--text-muted); cursor: not-allowed; transform: none; }
+
+  .input-hint { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 10px; }
+
+  .date-divider { text-align: center; margin: 16px 0; font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 10px; }
+  .date-divider::before, .date-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  @media (max-width: 640px) {
+    .sidebar { display: none; }
+    .suggestion-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <button class="new-chat-btn" onclick="newChat()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        New Chat
+      </button>
+    </div>
+
+    <div class="sidebar-section-label">Today</div>
+    <div class="chat-history-item active" onclick="loadHistory(this)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      Black Box Testing Notes
+    </div>
+    <div class="chat-history-item" onclick="loadHistory(this)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      Software Testing Types
+    </div>
+
+    <div class="sidebar-section-label">Yesterday</div>
+    <div class="chat-history-item" onclick="loadHistory(this)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      PDF Embedding Setup
+    </div>
+    <div class="chat-history-item" onclick="loadHistory(this)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      Ollama Integration Guide
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="model-badge">
+        <div class="model-dot"></div>
+        <span>Ollama · llama3.2:3b</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="chat-header">
+      <div class="model-selector">
+         RAG-Based-Enterprise-Knowledge-Assistant 
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" title="Share" onclick="alert('Share feature coming soon!')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="messages-container" id="messagesContainer">
+      <div class="messages-inner" id="messagesInner">
+        <div class="welcome" id="welcomeScreen">
+          <div class="welcome-logo">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <h1>RAG PDF Assistant</h1>
+          <p>Ask questions directly from your PDF documents. Powered by Ollama + Local LLM.</p>
+          <div class="suggestion-grid">
+            <button class="suggestion-card" onclick="useSuggestion('What is black box testing and what are its main characteristics?')">
+              <div class="s-title">Black box testing</div>
+              <div class="s-sub">Definition and characteristics</div>
+            </button>
+            <button class="suggestion-card" onclick="useSuggestion('Explain boundary value analysis with examples')">
+              <div class="s-title">Boundary value analysis</div>
+              <div class="s-sub">Explain with examples</div>
+            </button>
+            <button class="suggestion-card" onclick="useSuggestion('List all software testing techniques')">
+              <div class="s-title">Testing techniques</div>
+              <div class="s-sub">List all techniques</div>
+            </button>
+            <button class="suggestion-card" onclick="useSuggestion('What is the difference between white box and black box testing?')">
+              <div class="s-title">White vs Black box</div>
+              <div class="s-sub">Differences and use cases</div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-box">
+        <div class="input-wrapper">
+          <textarea id="userInput" placeholder="Message RAG Assistant..." rows="1"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <div class="input-footer">
+            <div class="input-tools">
+              <button class="tool-btn" onclick="document.getElementById('fileInput').click()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                Attach PDF
+              </button>
+              <button class="tool-btn" onclick="clearChat()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                Clear
+              </button>
+            </div>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+        <p class="input-hint">Running locally · Ollama + Vector DB · Open <strong>http://localhost:5000</strong> in browser</p>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="handleFileUpload(event)"/>
+    </div>
+  </main>
+</div>
+
+<script>
+  const FLASK_API = 'http://localhost:5000/ask';
+
+  let isLoading = false;
+  let messageCount = 0;
+
+  const input = document.getElementById('userInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const messagesInner = document.getElementById('messagesInner');
+  const messagesContainer = document.getElementById('messagesContainer');
+
+  input.addEventListener('input', () => {
+    sendBtn.disabled = input.value.trim().length === 0 || isLoading;
+  });
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!sendBtn.disabled) sendMessage();
+    }
+  }
+
+  function useSuggestion(text) {
+    input.value = text;
+    autoResize(input);
+    sendBtn.disabled = false;
+    sendMessage();
+  }
+
+  function clearChat() {
+    messagesInner.innerHTML = `
+      <div class="welcome" id="welcomeScreen">
+        <div class="welcome-logo">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </div>
+        <h1>RAG PDF Assistant</h1>
+        <p>Ask questions directly from your PDF documents. Powered by Ollama + Local LLM.</p>
+        <div class="suggestion-grid">
+          <button class="suggestion-card" onclick="useSuggestion('What is black box testing and what are its main characteristics?')">
+            <div class="s-title">Black box testing</div><div class="s-sub">Definition and characteristics</div>
+          </button>
+          <button class="suggestion-card" onclick="useSuggestion('Explain boundary value analysis with examples')">
+            <div class="s-title">Boundary value analysis</div><div class="s-sub">Explain with examples</div>
+          </button>
+          <button class="suggestion-card" onclick="useSuggestion('List all software testing techniques')">
+            <div class="s-title">Testing techniques</div><div class="s-sub">List all techniques</div>
+          </button>
+          <button class="suggestion-card" onclick="useSuggestion('What is the difference between white box and black box testing?')">
+            <div class="s-title">White vs Black box</div><div class="s-sub">Differences and use cases</div>
+          </button>
+        </div>
+      </div>`;
+    messageCount = 0;
+  }
+
+  function newChat() {
+    clearChat();
+    document.querySelectorAll('.chat-history-item').forEach(el => el.classList.remove('active'));
+  }
+
+  function loadHistory(el) {
+    document.querySelectorAll('.chat-history-item').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  function handleFileUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    addSystemMessage(`PDF "${file.name}" uploaded successfully. You can now ask questions about this document!`);
+  }
+
+  function addSystemMessage(text) {
+    const welcome = document.getElementById('welcomeScreen');
+    if (welcome) welcome.remove();
+    const div = document.createElement('div');
+    div.style.cssText = 'text-align:center;padding:8px 0;font-size:12px;color:var(--text-muted);';
+    div.textContent = text;
+    messagesInner.appendChild(div);
+    scrollToBottom();
+  }
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || isLoading) return;
+
+    const welcome = document.getElementById('welcomeScreen');
+    if (welcome) welcome.remove();
+
+    if (messageCount === 0) {
+      const divider = document.createElement('div');
+      divider.className = 'date-divider';
+      divider.textContent = 'Today';
+      messagesInner.appendChild(divider);
+    }
+    messageCount++;
+
+    // User message
+    const userRow = document.createElement('div');
+    userRow.className = 'message-row user';
+    userRow.innerHTML = `<div class="user-bubble">${escapeHtml(text)}</div>`;
+    messagesInner.appendChild(userRow);
+
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.disabled = true;
+    isLoading = true;
+    scrollToBottom();
+
+    // Typing indicator
+    const typingRow = document.createElement('div');
+    typingRow.className = 'typing-row';
+    typingRow.id = 'typingIndicator';
+    typingRow.innerHTML = `
+      <div class="bot-avatar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+      <div class="typing-dots"><span></span><span></span><span></span></div>`;
+    messagesInner.appendChild(typingRow);
+    scrollToBottom();
+
+    let answerHTML = '';
+    let sources = [];
+
+    try {
+      const res = await fetch(FLASK_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: text }),
+        signal: AbortSignal.timeout(120000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        answerHTML = `<p>${escapeHtml(data.answer || data.response || 'No response received.')}</p>`;
+        sources = data.sources || ['your_document.pdf'];
+      } else {
+        throw new Error('API error');
+      }
+    } catch (err) {
+      answerHTML = `<p style="color:var(--text-secondary);">Could not connect to Flask API at <code>localhost:5000</code>. Make sure <strong>python app.py</strong> is running in your terminal.</p>`;
+      sources = [];
+    }
+
+    // Remove typing
+    const typing = document.getElementById('typingIndicator');
+    if (typing) typing.remove();
+
+    // Bot message
+    const botRow = document.createElement('div');
+    botRow.className = 'message-row bot';
+    botRow.innerHTML = `
+      <div class="bot-avatar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div>
+        <div class="bot-content">${answerHTML}</div>
+        ${sources.length ? `<div class="source-pills">${sources.map(s => `<span class="source-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg>${s}</span>`).join('')}</div>` : ''}
+        <div class="bot-actions">
+          <button class="action-btn" onclick="copyText(this)" data-text="${answerHTML.replace(/"/g, '&quot;')}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy
+          </button>
+          <button class="action-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 00-6 0v4"/><rect x="2" y="9" width="20" height="13" rx="2"/></svg> Good response
+          </button>
+        </div>
+      </div>`;
+    messagesInner.appendChild(botRow);
+    isLoading = false;
+    sendBtn.disabled = input.value.trim().length === 0;
+    scrollToBottom();
+  }
+
+  function copyText(btn) {
+    const temp = document.createElement('div');
+    temp.innerHTML = btn.dataset.text;
+    navigator.clipboard.writeText(temp.textContent || '').then(() => {
+      btn.textContent = '✓ Copied!';
+      setTimeout(() => { btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy'; }, 1500);
+    });
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function scrollToBottom() {
+    setTimeout(() => { messagesContainer.scrollTop = messagesContainer.scrollHeight; }, 50);
+  }
+</script>
+</body>
+</html>
